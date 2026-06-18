@@ -271,6 +271,34 @@
       margin-top: 0.5rem;
       word-break: break-all;
     }
+
+    /* Note Item Styles */
+    .note-item {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      transition: var(--transition-smooth);
+      text-align: left;
+    }
+    .note-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    .note-text {
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .note-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
   </style>
 </head>
 <body>
@@ -347,7 +375,30 @@
           <p>Once you add notes, they will appear here.</p>
         </div>
 
-        <div id="user-display" class="user-profile"></div>
+        <!-- Note Input Form -->
+        <form id="note-form" onsubmit="event.preventDefault();" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+          <div class="form-group">
+            <label for="note-text">New Note</label>
+            <textarea 
+              id="note-text" 
+              class="form-control" 
+              rows="3" 
+              placeholder="Write a note to save to Firestore..." 
+              required
+              style="resize: none;"
+            ></textarea>
+          </div>
+          <button type="submit" id="btn-save-note" class="btn btn-primary">
+            Save Note
+          </button>
+        </form>
+
+        <!-- Notes List Container -->
+        <div id="notes-list" class="hidden" style="margin-bottom: 1.5rem; max-height: 250px; overflow-y: auto; padding-right: 4px;">
+          <!-- Notes will load here dynamically -->
+        </div>
+
+        <div id="user-display" class="user-profile" style="margin-bottom: 1rem;"></div>
 
         <button id="btn-signout" class="btn btn-danger">
           Sign out
@@ -371,6 +422,16 @@
       signOut, 
       onAuthStateChanged 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      serverTimestamp, 
+      query, 
+      where, 
+      orderBy, 
+      onSnapshot 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // TODO: Replace the following with your app's Firebase project configuration
     // You can obtain this configuration from the Firebase Console (Project Settings > Web App)
@@ -386,12 +447,14 @@
     // Initialize Firebase (Only executes if configured properly)
     let app;
     let auth;
+    let db;
     
     const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
 
     if (isFirebaseConfigured) {
       app = initializeApp(firebaseConfig);
       auth = getAuth(app);
+      db = getFirestore(app);
     } else {
       console.warn("Firebase config has not been configured yet. Real authentication triggers will be skipped.");
     }
@@ -408,6 +471,13 @@
     const signOutBtn = document.getElementById("btn-signout");
     const userDisplay = document.getElementById("user-display");
 
+    const noteForm = document.getElementById("note-form");
+    const noteTextInput = document.getElementById("note-text");
+    const notesList = document.getElementById("notes-list");
+    const notesEmptyState = document.querySelector(".notes-empty-state");
+
+    let unsubscribeNotes = null;
+
     // ==========================================
     // UI Screen Navigation / Switcher
     // ==========================================
@@ -416,11 +486,99 @@
         authScreen.classList.add("hidden");
         notesScreen.classList.remove("hidden");
         userDisplay.textContent = `Signed in as: ${user.email || 'Google User'}`;
+        subscribeToNotes(user);
       } else {
         notesScreen.classList.add("hidden");
         authScreen.classList.remove("hidden");
         userDisplay.textContent = "";
+        if (unsubscribeNotes) {
+          unsubscribeNotes();
+          unsubscribeNotes = null;
+        }
+        notesList.innerHTML = "";
+        notesList.classList.add("hidden");
+        notesEmptyState.classList.remove("hidden");
       }
+    }
+
+    // ==========================================
+    // Realtime Notes Sync
+    // ==========================================
+    function subscribeToNotes(user) {
+      if (!db || !user) return;
+      
+      const q = query(
+        collection(db, "notes"),
+        where("createdById", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+
+      if (unsubscribeNotes) {
+        unsubscribeNotes();
+      }
+
+      unsubscribeNotes = onSnapshot(q, (snapshot) => {
+        notesList.innerHTML = "";
+        if (snapshot.empty) {
+          notesEmptyState.classList.remove("hidden");
+          notesList.classList.add("hidden");
+        } else {
+          notesEmptyState.classList.add("hidden");
+          notesList.classList.remove("hidden");
+          
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            const dateStr = data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleString() : "Saving...";
+            
+            const noteEl = document.createElement("div");
+            noteEl.className = "note-item";
+            noteEl.innerHTML = `
+              <div class="note-text">${escapeHtml(data.text)}</div>
+              <div class="note-meta">
+                <span>By: ${escapeHtml(data.createdBy)}</span>
+                <span>${dateStr}</span>
+              </div>
+            `;
+            notesList.appendChild(noteEl);
+          });
+        }
+      }, (error) => {
+        console.error("Error listening to notes:", error);
+        if (error.code === 'failed-precondition') {
+          console.warn("Firestore index needed for sorting. Fetching without orderBy.");
+          const fallbackQ = query(
+            collection(db, "notes"),
+            where("createdById", "==", user.uid)
+          );
+          unsubscribeNotes = onSnapshot(fallbackQ, (snapshot) => {
+            notesList.innerHTML = "";
+            if (snapshot.empty) {
+              notesEmptyState.classList.remove("hidden");
+              notesList.classList.add("hidden");
+            } else {
+              notesEmptyState.classList.add("hidden");
+              notesList.classList.remove("hidden");
+              snapshot.forEach((doc) => {
+                const data = doc.data();
+                const noteEl = document.createElement("div");
+                noteEl.className = "note-item";
+                noteEl.innerHTML = `
+                  <div class="note-text">${escapeHtml(data.text)}</div>
+                  <div class="note-meta">
+                    <span>By: ${escapeHtml(data.createdBy)}</span>
+                  </div>
+                `;
+                notesList.appendChild(noteEl);
+              });
+            }
+          });
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
     // ==========================================
@@ -491,6 +649,37 @@
     // Event Listeners & Auth State Listeners
     // ==========================================
     
+    // 4. Save Note Action
+    async function handleSaveNote(e) {
+      e.preventDefault();
+      const text = noteTextInput.value.trim();
+      if (!text) return;
+
+      const user = auth ? auth.currentUser : null;
+      if (!user) {
+        alert("You must be logged in to save notes.");
+        return;
+      }
+
+      try {
+        if (db) {
+          await addDoc(collection(db, "notes"), {
+            text: text,
+            createdBy: user.email || "Google User",
+            createdById: user.uid,
+            createdAt: serverTimestamp()
+          });
+          noteTextInput.value = "";
+          console.log("Note saved successfully!");
+        } else {
+          alert("Firebase is not initialized.");
+        }
+      } catch (error) {
+        console.error("Error saving note to Firestore:", error);
+        alert("Error saving note: " + error.message);
+      }
+    }
+
     // Attach buttons to event triggers
     emailSignInBtn.addEventListener("click", (e) => {
       // Allow HTML5 validation to run if forms are filled
@@ -502,6 +691,7 @@
 
     googleSignInBtn.addEventListener("click", handleGoogleSignIn);
     signOutBtn.addEventListener("click", handleSignOut);
+    noteForm.addEventListener("submit", handleSaveNote);
 
     // TODO: Register active listener for Auth State Change
     if (isFirebaseConfigured && auth) {
