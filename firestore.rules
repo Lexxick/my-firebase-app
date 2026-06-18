@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: notes
+    // Document ID: auto-generated
+    // Fields:
+    //   - text: string (required, 1 to 1000 chars) - The content of the note
+    //   - createdBy: string (required, max 100 chars, email format) - Email of author
+    //   - createdById: string (required, exact match to auth.uid) - UID of author
+    //   - createdAt: timestamp (required) - Time the note was created
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user owns the note resource
+    function isNoteOwner(noteData) {
+      return isAuthenticated() && request.auth.uid == noteData.createdById;
+    }
+
+    // Validate email format
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate note schema and field limits
+    function isValidNote(data) {
+      return data.keys().hasOnly(['text', 'createdBy', 'createdById', 'createdAt']) &&
+        data.keys().hasAll(['text', 'createdBy', 'createdById', 'createdAt']) &&
+        data.text is string &&
+        data.text.size() >= 1 &&
+        data.text.size() <= 1000 &&
+        data.createdBy is string &&
+        data.createdBy.size() <= 100 &&
+        isValidEmail(data.createdBy) &&
+        data.createdById is string &&
+        data.createdById == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    // Allow read/write to notes collection
+    match /notes/{noteId} {
+      allow read: if isAuthenticated() && isNoteOwner(resource.data);
+      allow create: if isAuthenticated() && isValidNote(request.resource.data);
+      allow update: if isAuthenticated() && 
+                      isNoteOwner(resource.data) && 
+                      isValidNote(request.resource.data) &&
+                      request.resource.data.createdById == resource.data.createdById &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && isNoteOwner(resource.data);
+    }
+  }
+}
