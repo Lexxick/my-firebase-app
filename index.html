@@ -430,6 +430,7 @@
       query, 
       where, 
       orderBy, 
+      limit, 
       onSnapshot 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
@@ -510,7 +511,8 @@
       const q = query(
         collection(db, "notes"),
         where("createdById", "==", user.uid),
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "desc"),
+        limit(20)
       );
 
       if (unsubscribeNotes) {
