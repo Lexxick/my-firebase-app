@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal Notes & Auth</title>
+  
+  <!-- Import Outfit Font from Google Fonts for a premium look -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================
+       1. DESIGN SYSTEM & TOKENS
+       ========================================== */
+    :root {
+      --bg-gradient: radial-gradient(circle at 50% 0%, #1a1b26 0%, #0f1016 100%);
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.06);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-color: #6366f1; /* Indigo */
+      --accent-hover: #4f46e5;
+      --input-bg: rgba(15, 16, 22, 0.6);
+      --input-border: rgba(255, 255, 255, 0.1);
+      --input-focus: #818cf8;
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+      --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ==========================================
+       2. RESET & BASE STYLES
+       ========================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      overflow-x: hidden;
+    }
+
+    /* Helper utility for screen toggling */
+    .hidden {
+      display: none !important;
+    }
+
+    /* ==========================================
+       3. LAYOUT & CARD CONTAINER (GLASSMORPHISM)
+       ========================================== */
+    .container {
+      width: 100%;
+      max-width: 440px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 24px;
+      padding: 2.5rem 2rem;
+      box-shadow: var(--shadow-lg);
+      transition: var(--transition-smooth);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header p {
+      font-size: 0.95rem;
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================
+       4. FORM CONTROLS & INPUTS
+       ========================================== */
+    .form-group {
+      margin-bottom: 1.25rem;
+      position: relative;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-control {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      font-family: inherit;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+      transition: var(--transition-smooth);
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--input-focus);
+      box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+    }
+
+    .form-control::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* ==========================================
+       5. BUTTON STYLES
+       ========================================== */
+    .btn {
+      width: 100%;
+      padding: 0.85rem;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      transition: var(--transition-smooth);
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent-color);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+      margin-top: 0.5rem;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active {
+      transform: translateY(1px);
+    }
+
+    /* Divider for alternative sign-in options */
+    .divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 1.5rem 0;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .divider:not(:empty)::before {
+      margin-right: .75em;
+    }
+
+    .divider:not(:empty)::after {
+      margin-left: .75em;
+    }
+
+    .btn-google {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-google:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-google svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      margin-top: 1.5rem;
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    /* ==========================================
+       6. SCREEN-SPECIFIC DESIGN
+       ========================================== */
+    /* "My Notes" Screen */
+    .notes-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .notes-empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 3rem 1.5rem;
+      border: 1px dashed var(--card-border);
+      border-radius: 16px;
+      background: rgba(0, 0, 0, 0.1);
+      margin: 1.5rem 0;
+    }
+
+    .notes-empty-state svg {
+      width: 48px;
+      height: 48px;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .notes-empty-state h3 {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+      color: var(--text-primary);
+    }
+
+    .notes-empty-state p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    /* User Profile section on Notes screen */
+    .user-profile {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 0.5rem;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- ==========================================
+         A. AUTH SCREEN (SIGN IN / UP)
+         ========================================== -->
+    <div id="auth-screen">
+      <div class="header">
+        <h1>Welcome Back</h1>
+        <p>Sign in to access your notes</p>
+      </div>
+
+      <form id="login-form" onsubmit="event.preventDefault();">
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input 
+            type="email" 
+            id="email" 
+            class="form-control" 
+            placeholder="you@example.com" 
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input 
+            type="password" 
+            id="password" 
+            class="form-control" 
+            placeholder="••••••••" 
+            required
+          >
+        </div>
+
+        <button type="submit" id="btn-email-signin" class="btn btn-primary">
+          Sign in
+        </button>
+      </form>
+
+      <div class="divider">or continue with</div>
+
+      <button id="btn-google-signin" class="btn btn-google">
+        <!-- Google SVG Icon -->
+        <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+        </svg>
+        Sign in with Google
+      </button>
+    </div>
+
+    <!-- ==========================================
+         B. MY NOTES SCREEN (AUTHORIZED ONLY)
+         ========================================== -->
+    <div id="notes-screen" class="hidden">
+      <div class="notes-container">
+        <div class="header">
+          <h1>My Notes</h1>
+          <p>Organize your thoughts securely</p>
+        </div>
+
+        <!-- Empty state placeholder for notes -->
+        <div class="notes-empty-state">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <h3>No notes yet</h3>
+          <p>Once you add notes, they will appear here.</p>
+        </div>
+
+        <div id="user-display" class="user-profile"></div>
+
+        <button id="btn-signout" class="btn btn-danger">
+          Sign out
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==========================================
+       C. FIREBASE CONFIG & AUTHENTICATION LOGIC
+       ========================================== -->
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithEmailAndPassword, 
+      GoogleAuthProvider, 
+      signInWithPopup, 
+      signOut, 
+      onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+    // TODO: Replace the following with your app's Firebase project configuration
+    // You can obtain this configuration from the Firebase Console (Project Settings > Web App)
+    const firebaseConfig = {
+      apiKey: "AIzaSyCAqvNQCCwmfYetMaYb9LxRwa92cx1u5u4",
+      authDomain: "iskl-app-23413.firebaseapp.com",
+      projectId: "iskl-app-23413",
+      storageBucket: "iskl-app-23413.firebasestorage.app",
+      messagingSenderId: "1067433094631",
+      appId: "1:1067433094631:web:b7e927830ae14b730ca142"
+    };
+
+    // Initialize Firebase (Only executes if configured properly)
+    let app;
+    let auth;
+    
+    const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
+
+    if (isFirebaseConfigured) {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+    } else {
+      console.warn("Firebase config has not been configured yet. Real authentication triggers will be skipped.");
+    }
+
+    // --- DOM Elements ---
+    const authScreen = document.getElementById("auth-screen");
+    const notesScreen = document.getElementById("notes-screen");
+    
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    
+    const emailSignInBtn = document.getElementById("btn-email-signin");
+    const googleSignInBtn = document.getElementById("btn-google-signin");
+    const signOutBtn = document.getElementById("btn-signout");
+    const userDisplay = document.getElementById("user-display");
+
+    // ==========================================
+    // UI Screen Navigation / Switcher
+    // ==========================================
+    function showScreen(user) {
+      if (user) {
+        authScreen.classList.add("hidden");
+        notesScreen.classList.remove("hidden");
+        userDisplay.textContent = `Signed in as: ${user.email || 'Google User'}`;
+      } else {
+        notesScreen.classList.add("hidden");
+        authScreen.classList.remove("hidden");
+        userDisplay.textContent = "";
+      }
+    }
+
+    // ==========================================
+    // Authentication Actions
+    // ==========================================
+
+    // 1. Email and Password Sign-in
+    async function handleEmailSignIn() {
+      const email = emailInput.value;
+      const password = passwordInput.value;
+
+      console.log("Email sign-in attempted with:", email);
+
+      if (!isFirebaseConfigured) {
+        alert("Firebase Config is not set up yet. Simulating login locally.");
+        showScreen({ email: email });
+        return;
+      }
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        console.log("Logged in:", userCredential.user);
+      } catch (error) {
+        console.error("Sign-in error:", error.message);
+        alert(error.message);
+      }
+    }
+
+    // 2. Google Sign-in
+    async function handleGoogleSignIn() {
+      console.log("Google sign-in button clicked");
+
+      if (!isFirebaseConfigured) {
+        alert("Firebase Config is not set up yet. Simulating Google login locally.");
+        showScreen({ email: "google-user@domain.com" });
+        return;
+      }
+
+      const provider = new GoogleAuthProvider();
+      try {
+        const result = await signInWithPopup(auth, provider);
+        console.log("Google Auth Success:", result.user);
+      } catch (error) {
+        console.error("Google Sign-in error:", error.message);
+        alert(error.message);
+      }
+    }
+
+    // 3. Sign Out
+    async function handleSignOut() {
+      console.log("Sign out button clicked");
+
+      if (!isFirebaseConfigured) {
+        showScreen(null);
+        return;
+      }
+
+      try {
+        await signOut(auth);
+        console.log("Signed out successfully");
+      } catch (error) {
+        console.error("Sign out error:", error.message);
+        alert(error.message);
+      }
+    }
+
+    // ==========================================
+    // Event Listeners & Auth State Listeners
+    // ==========================================
+    
+    // Attach buttons to event triggers
+    emailSignInBtn.addEventListener("click", (e) => {
+      // Allow HTML5 validation to run if forms are filled
+      if (document.getElementById("login-form").checkValidity()) {
+        e.preventDefault();
+        handleEmailSignIn();
+      }
+    });
+
+    googleSignInBtn.addEventListener("click", handleGoogleSignIn);
+    signOutBtn.addEventListener("click", handleSignOut);
+
+    // TODO: Register active listener for Auth State Change
+    if (isFirebaseConfigured && auth) {
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          // User is signed in
+          showScreen(user);
+        } else {
+          // User is signed out
+          showScreen(null);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
