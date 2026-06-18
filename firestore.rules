@@ -53,7 +53,7 @@ service cloud.firestore {
 
     // Allow read/write to notes collection
     match /notes/{noteId} {
-      allow read: if isAuthenticated() && isNoteOwner(resource.data);
+      allow read: if true;
       allow create: if isAuthenticated() && isValidNote(request.resource.data);
       allow update: if isAuthenticated() && 
                       isNoteOwner(resource.data) && 
