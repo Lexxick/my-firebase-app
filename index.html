@@ -366,15 +366,6 @@
           <p>Organize your thoughts securely</p>
         </div>
 
-        <!-- Empty state placeholder for notes -->
-        <div class="notes-empty-state">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-          </svg>
-          <h3>No notes yet</h3>
-          <p>Once you add notes, they will appear here.</p>
-        </div>
-
         <!-- Note Input Form -->
         <form id="note-form" onsubmit="event.preventDefault();" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
           <div class="form-group">
@@ -393,16 +384,32 @@
           </button>
         </form>
 
-        <!-- Notes List Container -->
-        <div id="notes-list" class="hidden" style="margin-bottom: 1.5rem; max-height: 250px; overflow-y: auto; padding-right: 4px;">
-          <!-- Notes will load here dynamically -->
-        </div>
-
         <div id="user-display" class="user-profile" style="margin-bottom: 1rem;"></div>
 
         <button id="btn-signout" class="btn btn-danger">
           Sign out
         </button>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         C. SHARED NOTES LIST (VISIBLE TO EVERYONE)
+         ========================================== -->
+    <div style="margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 1.5rem;">
+      <p style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">All Notes</p>
+
+      <!-- Empty state -->
+      <div class="notes-empty-state" id="notes-empty-state">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <h3>No notes yet</h3>
+        <p>Sign in and add the first note!</p>
+      </div>
+
+      <!-- Notes list -->
+      <div id="notes-list" class="hidden" style="max-height: 300px; overflow-y: auto; padding-right: 4px;">
+        <!-- Populated dynamically -->
       </div>
     </div>
 
@@ -475,7 +482,7 @@
     const noteForm = document.getElementById("note-form");
     const noteTextInput = document.getElementById("note-text");
     const notesList = document.getElementById("notes-list");
-    const notesEmptyState = document.querySelector(".notes-empty-state");
+    const notesEmptyState = document.getElementById("notes-empty-state");
 
     let unsubscribeNotes = null;
 
@@ -487,37 +494,27 @@
         authScreen.classList.add("hidden");
         notesScreen.classList.remove("hidden");
         userDisplay.textContent = `Signed in as: ${user.email || 'Google User'}`;
-        subscribeToNotes(user);
       } else {
         notesScreen.classList.add("hidden");
         authScreen.classList.remove("hidden");
         userDisplay.textContent = "";
-        if (unsubscribeNotes) {
-          unsubscribeNotes();
-          unsubscribeNotes = null;
-        }
-        notesList.innerHTML = "";
-        notesList.classList.add("hidden");
-        notesEmptyState.classList.remove("hidden");
       }
     }
 
     // ==========================================
     // Realtime Notes Sync
     // ==========================================
-    function subscribeToNotes(user) {
-      if (!db || !user) return;
-      
+    // Subscribe to ALL notes publicly on page load (no uid filter — read is public)
+    function subscribeToAllNotes() {
+      if (!db) return;
+
       const q = query(
         collection(db, "notes"),
-        where("createdById", "==", user.uid),
         orderBy("createdAt", "desc"),
         limit(20)
       );
 
-      if (unsubscribeNotes) {
-        unsubscribeNotes();
-      }
+      if (unsubscribeNotes) unsubscribeNotes();
 
       unsubscribeNotes = onSnapshot(q, (snapshot) => {
         notesList.innerHTML = "";
@@ -527,11 +524,13 @@
         } else {
           notesEmptyState.classList.add("hidden");
           notesList.classList.remove("hidden");
-          
+
           snapshot.forEach((doc) => {
             const data = doc.data();
-            const dateStr = data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleString() : "Saving...";
-            
+            const dateStr = data.createdAt
+              ? new Date(data.createdAt.seconds * 1000).toLocaleString()
+              : "Saving...";
+
             const noteEl = document.createElement("div");
             noteEl.className = "note-item";
             noteEl.innerHTML = `
@@ -546,35 +545,6 @@
         }
       }, (error) => {
         console.error("Error listening to notes:", error);
-        if (error.code === 'failed-precondition') {
-          console.warn("Firestore index needed for sorting. Fetching without orderBy.");
-          const fallbackQ = query(
-            collection(db, "notes"),
-            where("createdById", "==", user.uid)
-          );
-          unsubscribeNotes = onSnapshot(fallbackQ, (snapshot) => {
-            notesList.innerHTML = "";
-            if (snapshot.empty) {
-              notesEmptyState.classList.remove("hidden");
-              notesList.classList.add("hidden");
-            } else {
-              notesEmptyState.classList.add("hidden");
-              notesList.classList.remove("hidden");
-              snapshot.forEach((doc) => {
-                const data = doc.data();
-                const noteEl = document.createElement("div");
-                noteEl.className = "note-item";
-                noteEl.innerHTML = `
-                  <div class="note-text">${escapeHtml(data.text)}</div>
-                  <div class="note-meta">
-                    <span>By: ${escapeHtml(data.createdBy)}</span>
-                  </div>
-                `;
-                notesList.appendChild(noteEl);
-              });
-            }
-          });
-        }
       });
     }
 
@@ -695,14 +665,17 @@
     signOutBtn.addEventListener("click", handleSignOut);
     noteForm.addEventListener("submit", handleSaveNote);
 
-    // TODO: Register active listener for Auth State Change
+    // Start public notes subscription immediately on page load
+    if (isFirebaseConfigured && db) {
+      subscribeToAllNotes();
+    }
+
+    // Auth state listener — controls which screen is shown
     if (isFirebaseConfigured && auth) {
       onAuthStateChanged(auth, (user) => {
         if (user) {
-          // User is signed in
           showScreen(user);
         } else {
-          // User is signed out
           showScreen(null);
         }
       });
