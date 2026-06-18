@@ -299,6 +299,44 @@
       display: flex;
       justify-content: space-between;
     }
+    .note-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .note-btn {
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: var(--text-secondary);
+      transition: var(--transition-smooth);
+    }
+    .note-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-primary);
+    }
+    .note-btn-danger {
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+    .note-btn-danger:hover {
+      background: rgba(239, 68, 68, 0.18);
+      color: #fca5a5;
+    }
+    .note-error {
+      font-size: 0.8rem;
+      color: #f87171;
+      margin-top: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: rgba(239, 68, 68, 0.08);
+      border-radius: 8px;
+      border: 1px solid rgba(239, 68, 68, 0.15);
+    }
   </style>
 </head>
 <body>
@@ -382,6 +420,7 @@
           <button type="submit" id="btn-save-note" class="btn btn-primary">
             Save Note
           </button>
+          <p id="note-form-error" class="note-error hidden"></p>
         </form>
 
         <div id="user-display" class="user-profile" style="margin-bottom: 1rem;"></div>
@@ -396,7 +435,12 @@
          C. SHARED NOTES LIST (VISIBLE TO EVERYONE)
          ========================================== -->
     <div style="margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 1.5rem;">
-      <p style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem;">All Notes</p>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 1rem;">
+        <p style="font-size: 0.8rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">All Notes</p>
+        <button id="btn-live-toggle" class="note-btn" style="font-size:0.7rem; padding:0.25rem 0.6rem;">⏸ Pause live</button>
+      </div>
+
+      <p id="notes-list-error" class="note-error hidden"></p>
 
       <!-- Empty state -->
       <div class="notes-empty-state" id="notes-empty-state">
@@ -419,30 +463,16 @@
        C. FIREBASE CONFIG & AUTHENTICATION LOGIC
        ========================================== -->
   <script type="module">
-    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { 
-      getAuth, 
-      signInWithEmailAndPassword, 
-      GoogleAuthProvider, 
-      signInWithPopup, 
-      signOut, 
-      onAuthStateChanged 
+    import {
+      getAuth, signInWithEmailAndPassword, GoogleAuthProvider,
+      signInWithPopup, signOut, onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { 
-      getFirestore, 
-      collection, 
-      addDoc, 
-      serverTimestamp, 
-      query, 
-      where, 
-      orderBy, 
-      limit, 
-      onSnapshot 
+    import {
+      getFirestore, collection, addDoc, doc, updateDoc, deleteDoc,
+      serverTimestamp, query, orderBy, limit, onSnapshot
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // TODO: Replace the following with your app's Firebase project configuration
-    // You can obtain this configuration from the Firebase Console (Project Settings > Web App)
     const firebaseConfig = {
       apiKey: "AIzaSyCAqvNQCCwmfYetMaYb9LxRwa92cx1u5u4",
       authDomain: "iskl-app-23413.firebaseapp.com",
@@ -452,48 +482,84 @@
       appId: "1:1067433094631:web:b7e927830ae14b730ca142"
     };
 
-    // Initialize Firebase (Only executes if configured properly)
-    let app;
-    let auth;
-    let db;
-    
     const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
-
+    let app, auth, db;
     if (isFirebaseConfigured) {
       app = initializeApp(firebaseConfig);
       auth = getAuth(app);
       db = getFirestore(app);
     } else {
-      console.warn("Firebase config has not been configured yet. Real authentication triggers will be skipped.");
+      console.warn("Firebase not configured.");
     }
 
-    // --- DOM Elements ---
-    const authScreen = document.getElementById("auth-screen");
-    const notesScreen = document.getElementById("notes-screen");
-    
-    const emailInput = document.getElementById("email");
-    const passwordInput = document.getElementById("password");
-    
-    const emailSignInBtn = document.getElementById("btn-email-signin");
+    // ── DOM ────────────────────────────────────────────────────────
+    const authScreen      = document.getElementById("auth-screen");
+    const notesScreen     = document.getElementById("notes-screen");
+    const emailInput      = document.getElementById("email");
+    const passwordInput   = document.getElementById("password");
+    const emailSignInBtn  = document.getElementById("btn-email-signin");
     const googleSignInBtn = document.getElementById("btn-google-signin");
-    const signOutBtn = document.getElementById("btn-signout");
-    const userDisplay = document.getElementById("user-display");
-
-    const noteForm = document.getElementById("note-form");
-    const noteTextInput = document.getElementById("note-text");
-    const notesList = document.getElementById("notes-list");
+    const signOutBtn      = document.getElementById("btn-signout");
+    const userDisplay     = document.getElementById("user-display");
+    const noteForm        = document.getElementById("note-form");
+    const saveNoteBtn     = document.getElementById("btn-save-note");
+    const noteTextInput   = document.getElementById("note-text");
+    const notesList       = document.getElementById("notes-list");
     const notesEmptyState = document.getElementById("notes-empty-state");
+    const noteFormError   = document.getElementById("note-form-error");
+    const notesListError  = document.getElementById("notes-list-error");
 
     let unsubscribeNotes = null;
 
-    // ==========================================
-    // UI Screen Navigation / Switcher
-    // ==========================================
+    // ── Firestore note operations (no DOM) ─────────────────────────
+
+    async function addNote(text, user) {
+      await addDoc(collection(db, "notes"), {
+        text,
+        createdBy: user.email || "Google User",
+        createdById: user.uid,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    async function editNote(id, newText) {
+      await updateDoc(doc(db, "notes", id), { text: newText });
+    }
+
+    async function deleteNote(id) {
+      await deleteDoc(doc(db, "notes", id));
+    }
+
+    // ── UI helpers ─────────────────────────────────────────────────
+
+    function setButtonLoading(btn, loading, idleLabel) {
+      btn.disabled = loading;
+      btn.textContent = loading ? "Saving..." : idleLabel;
+    }
+
+    function showError(el, message) {
+      el.textContent = message;
+      el.classList.remove("hidden");
+    }
+
+    function clearError(el) {
+      el.textContent = "";
+      el.classList.add("hidden");
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // ── Screen nav ─────────────────────────────────────────────────
+
     function showScreen(user) {
       if (user) {
         authScreen.classList.add("hidden");
         notesScreen.classList.remove("hidden");
-        userDisplay.textContent = `Signed in as: ${user.email || 'Google User'}`;
+        userDisplay.textContent = `Signed in as: ${user.email || "Google User"}`;
       } else {
         notesScreen.classList.add("hidden");
         authScreen.classList.remove("hidden");
@@ -501,22 +567,39 @@
       }
     }
 
-    // ==========================================
-    // Realtime Notes Sync
-    // ==========================================
-    // Subscribe to ALL notes publicly on page load (no uid filter — read is public)
+    // ── Notes list renderer ────────────────────────────────────────
+
+    function buildNoteElement(docSnap, currentUid) {
+      const data = docSnap.data();
+      const dateStr = data.createdAt
+        ? new Date(data.createdAt.seconds * 1000).toLocaleString()
+        : "Saving...";
+      const isOwner = currentUid && data.createdById === currentUid;
+      const actions = isOwner
+        ? `<div class="note-actions">
+             <button class="note-btn" data-action="edit" data-id="${docSnap.id}">Edit</button>
+             <button class="note-btn note-btn-danger" data-action="delete" data-id="${docSnap.id}">Delete</button>
+           </div>`
+        : "";
+      const el = document.createElement("div");
+      el.className = "note-item";
+      el.innerHTML = `
+        <div class="note-text">${escapeHtml(data.text)}</div>
+        <div class="note-meta">
+          <span>By: ${escapeHtml(data.createdBy)}</span>
+          <span>${dateStr}</span>
+        </div>
+        ${actions}
+      `;
+      return el;
+    }
+
     function subscribeToAllNotes() {
       if (!db) return;
-
-      const q = query(
-        collection(db, "notes"),
-        orderBy("createdAt", "desc"),
-        limit(20)
-      );
-
+      const q = query(collection(db, "notes"), orderBy("createdAt", "desc"), limit(20));
       if (unsubscribeNotes) unsubscribeNotes();
-
       unsubscribeNotes = onSnapshot(q, (snapshot) => {
+        clearError(notesListError);
         notesList.innerHTML = "";
         if (snapshot.empty) {
           notesEmptyState.classList.remove("hidden");
@@ -524,137 +607,121 @@
         } else {
           notesEmptyState.classList.add("hidden");
           notesList.classList.remove("hidden");
-
-          snapshot.forEach((doc) => {
-            const data = doc.data();
-            const dateStr = data.createdAt
-              ? new Date(data.createdAt.seconds * 1000).toLocaleString()
-              : "Saving...";
-
-            const noteEl = document.createElement("div");
-            noteEl.className = "note-item";
-            noteEl.innerHTML = `
-              <div class="note-text">${escapeHtml(data.text)}</div>
-              <div class="note-meta">
-                <span>By: ${escapeHtml(data.createdBy)}</span>
-                <span>${dateStr}</span>
-              </div>
-            `;
-            notesList.appendChild(noteEl);
-          });
+          const currentUid = auth?.currentUser?.uid ?? null;
+          snapshot.forEach((docSnap) => notesList.appendChild(buildNoteElement(docSnap, currentUid)));
         }
       }, (error) => {
-        console.error("Error listening to notes:", error);
+        console.error("Snapshot error:", error);
+        showError(notesListError, "Could not load notes: " + error.message);
       });
     }
 
-    function escapeHtml(str) {
-      if (!str) return "";
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    // ── Note handlers (loading + error states) ─────────────────────
+
+    async function handleSaveNote(e) {
+      e.preventDefault();
+      const text = noteTextInput.value.trim();
+      if (!text) return;
+      const user = auth?.currentUser;
+      if (!user) { showError(noteFormError, "You must be signed in to save notes."); return; }
+      if (!db)   { showError(noteFormError, "Firebase is not initialized."); return; }
+
+      clearError(noteFormError);
+      setButtonLoading(saveNoteBtn, true, "Save Note");
+      try {
+        await addNote(text, user);
+        noteTextInput.value = "";
+      } catch (error) {
+        console.error("Save error:", error);
+        showError(noteFormError, "Could not save note: " + error.message);
+      } finally {
+        setButtonLoading(saveNoteBtn, false, "Save Note");
+      }
     }
 
-    // ==========================================
-    // Authentication Actions
-    // ==========================================
-
-    // 1. Email and Password Sign-in
-    async function handleEmailSignIn() {
-      const email = emailInput.value;
-      const password = passwordInput.value;
-
-      console.log("Email sign-in attempted with:", email);
-
-      if (!isFirebaseConfigured) {
-        alert("Firebase Config is not set up yet. Simulating login locally.");
-        showScreen({ email: email });
-        return;
-      }
-
+    async function handleEditNote(id, currentText) {
+      const newText = prompt("Edit note:", currentText);
+      if (newText === null) return;
+      const trimmed = newText.trim();
+      if (!trimmed || trimmed === currentText) return;
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        console.log("Logged in:", userCredential.user);
+        await editNote(id, trimmed);
+      } catch (error) {
+        console.error("Edit error:", error);
+        showError(notesListError, "Could not edit note: " + error.message);
+      }
+    }
+
+    async function handleDeleteNote(id) {
+      if (!confirm("Delete this note?")) return;
+      try {
+        await deleteNote(id);
+      } catch (error) {
+        console.error("Delete error:", error);
+        showError(notesListError, "Could not delete note: " + error.message);
+      }
+    }
+
+    // ── Auth handlers ──────────────────────────────────────────────
+
+    async function handleEmailSignIn() {
+      if (!isFirebaseConfigured) { showScreen({ email: emailInput.value }); return; }
+      try {
+        await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
       } catch (error) {
         console.error("Sign-in error:", error.message);
         alert(error.message);
       }
     }
 
-    // 2. Google Sign-in
     async function handleGoogleSignIn() {
-      console.log("Google sign-in button clicked");
-
-      if (!isFirebaseConfigured) {
-        alert("Firebase Config is not set up yet. Simulating Google login locally.");
-        showScreen({ email: "google-user@domain.com" });
-        return;
-      }
-
-      const provider = new GoogleAuthProvider();
+      if (!isFirebaseConfigured) { showScreen({ email: "google-user@domain.com" }); return; }
       try {
-        const result = await signInWithPopup(auth, provider);
-        console.log("Google Auth Success:", result.user);
+        await signInWithPopup(auth, new GoogleAuthProvider());
       } catch (error) {
-        console.error("Google Sign-in error:", error.message);
+        console.error("Google sign-in error:", error.message);
         alert(error.message);
       }
     }
 
-    // 3. Sign Out
     async function handleSignOut() {
-      console.log("Sign out button clicked");
-
-      if (!isFirebaseConfigured) {
-        showScreen(null);
-        return;
-      }
-
+      if (!isFirebaseConfigured) { showScreen(null); return; }
       try {
         await signOut(auth);
-        console.log("Signed out successfully");
       } catch (error) {
-        console.error("Sign out error:", error.message);
+        console.error("Sign-out error:", error.message);
         alert(error.message);
       }
     }
 
-    // ==========================================
-    // Event Listeners & Auth State Listeners
-    // ==========================================
-    
-    // 4. Save Note Action
-    async function handleSaveNote(e) {
-      e.preventDefault();
-      const text = noteTextInput.value.trim();
-      if (!text) return;
+    // ── Event wiring ───────────────────────────────────────────────
 
-      const user = auth ? auth.currentUser : null;
-      if (!user) {
-        alert("You must be logged in to save notes.");
-        return;
+    notesList.addEventListener("click", (e) => {
+      const btn = e.target.closest(".note-btn");
+      if (!btn) return;
+      const { action, id } = btn.dataset;
+      if (action === "delete") {
+        handleDeleteNote(id);
+      } else if (action === "edit") {
+        const text = btn.closest(".note-item").querySelector(".note-text").textContent;
+        handleEditNote(id, text);
       }
+    });
 
-      try {
-        if (db) {
-          await addDoc(collection(db, "notes"), {
-            text: text,
-            createdBy: user.email || "Google User",
-            createdById: user.uid,
-            createdAt: serverTimestamp()
-          });
-          noteTextInput.value = "";
-          console.log("Note saved successfully!");
-        } else {
-          alert("Firebase is not initialized.");
-        }
-      } catch (error) {
-        console.error("Error saving note to Firestore:", error);
-        alert("Error saving note: " + error.message);
+    const liveToggleBtn = document.getElementById("btn-live-toggle");
+    let liveEnabled = true;
+    liveToggleBtn.addEventListener("click", () => {
+      liveEnabled = !liveEnabled;
+      if (liveEnabled) {
+        subscribeToAllNotes();
+        liveToggleBtn.textContent = "⏸ Pause live";
+      } else {
+        if (unsubscribeNotes) { unsubscribeNotes(); unsubscribeNotes = null; }
+        liveToggleBtn.textContent = "▶ Resume live";
       }
-    }
+    });
 
-    // Attach buttons to event triggers
     emailSignInBtn.addEventListener("click", (e) => {
-      // Allow HTML5 validation to run if forms are filled
       if (document.getElementById("login-form").checkValidity()) {
         e.preventDefault();
         handleEmailSignIn();
@@ -665,19 +732,12 @@
     signOutBtn.addEventListener("click", handleSignOut);
     noteForm.addEventListener("submit", handleSaveNote);
 
-    // Start public notes subscription immediately on page load
-    if (isFirebaseConfigured && db) {
-      subscribeToAllNotes();
-    }
+    if (isFirebaseConfigured && db) subscribeToAllNotes();
 
-    // Auth state listener — controls which screen is shown
     if (isFirebaseConfigured && auth) {
       onAuthStateChanged(auth, (user) => {
-        if (user) {
-          showScreen(user);
-        } else {
-          showScreen(null);
-        }
+        showScreen(user ?? null);
+        subscribeToAllNotes();
       });
     }
   </script>
